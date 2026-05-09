@@ -1,0 +1,9 @@
+# Data (downloaded locally, not versioned)
+data/
+*.csv
+
+# Python
+__pycache__/
+*.py[oc]
+.venv/
+.env

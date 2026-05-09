@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>US Options Volume Dashboard</title>
+  <script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', sans-serif; background: #0f1117; color: #e0e0e0; }
+    header { padding: 18px 28px; background: #1a1d27; border-bottom: 1px solid #2d3148; }
+    header h1 { font-size: 1.4rem; font-weight: 600; color: #fff; }
+    header p  { font-size: 0.82rem; color: #888; margin-top: 3px; }
+
+    .tabs { display: flex; gap: 6px; padding: 14px 28px 0; border-bottom: 1px solid #2d3148; background: #1a1d27; }
+    .tab-btn {
+      padding: 8px 20px; border: none; background: transparent;
+      color: #888; font-size: 0.88rem; cursor: pointer;
+      border-bottom: 2px solid transparent; transition: all 0.2s;
+    }
+    .tab-btn.active { color: #7eb6ff; border-bottom-color: #7eb6ff; }
+    .tab-btn:hover:not(.active) { color: #ccc; }
+
+    .tab-panel { display: none; padding: 24px 28px; }
+    .tab-panel.active { display: block; }
+
+    .chart-wrap { background: #1a1d27; border: 1px solid #2d3148; border-radius: 8px; padding: 12px; margin-bottom: 20px; }
+    .chart-title { font-size: 0.88rem; font-weight: 600; color: #aaa; padding: 0 8px 10px; letter-spacing: 0.04em; }
+
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 14px; }
+    .stat-card {
+      background: #1a1d27; border: 1px solid #2d3148; border-radius: 8px;
+      padding: 16px 18px;
+    }
+    .stat-label { font-size: 0.74rem; color: #888; letter-spacing: 0.05em; text-transform: uppercase; }
+    .stat-value { font-size: 1.45rem; font-weight: 700; color: #fff; margin-top: 4px; }
+    .stat-sub   { font-size: 0.76rem; color: #666; margin-top: 2px; }
+    .stat-date  { color: #7eb6ff !important; }
+  </style>
+</head>
+<body>
+<header>
+  <h1>US Options Volume Dashboard</h1>
+  <p>CBOE Daily Market Statistics — Call / Put Volume &amp; Ratio (2-Year History)</p>
+</header>
+
+<div class="tabs">
+  <button class="tab-btn active" onclick="switchTab('volume', this)">出来高</button>
+  <button class="tab-btn" onclick="switchTab('ratio', this)">コール/プット比率</button>
+  <button class="tab-btn" onclick="switchTab('stats', this)">統計サマリー</button>
+</div>
+
+<!-- TAB 1: Volume -->
+<div id="tab-volume" class="tab-panel active">
+  <div class="chart-wrap">
+    <div class="chart-title">コール出来高 / プット出来高（日次）</div>
+    <div id="chart-volume" style="height:440px"></div>
+  </div>
+  <div class="chart-wrap">
+    <div class="chart-title">総出来高（日次）</div>
+    <div id="chart-total" style="height:260px"></div>
+  </div>
+</div>
+
+<!-- TAB 2: Ratio -->
+<div id="tab-ratio" class="tab-panel">
+  <div class="chart-wrap">
+    <div class="chart-title">コール/プット比率（日次 + 20日移動平均）</div>
+    <div id="chart-cp-ratio" style="height:380px"></div>
+  </div>
+  <div class="chart-wrap">
+    <div class="chart-title">プット/コール比率（日次 + 20日移動平均）</div>
+    <div id="chart-pc-ratio" style="height:380px"></div>
+  </div>
+</div>
+
+<!-- TAB 3: Stats -->
+<div id="tab-stats" class="tab-panel">
+  <div id="stats-grid" class="stats-grid"></div>
+</div>
+
+<script>
+const LAYOUT_BASE = {
+  paper_bgcolor: '#1a1d27',
+  plot_bgcolor:  '#0f1117',
+  font: { color: '#ccc', size: 11 },
+  margin: { l: 55, r: 20, t: 20, b: 45 },
+  xaxis: { showgrid: false, color: '#555', tickfont: { size: 10 } },
+  yaxis: { showgrid: true, gridcolor: '#1f2235', color: '#555', tickfont: { size: 10 } },
+  legend: { orientation: 'h', x: 0, y: 1.08, font: { size: 11 } },
+  hovermode: 'x unified',
+};
+const CFG = { responsive: true, displayModeBar: false };
+
+function switchTab(name, btn) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  btn.classList.add('active');
+}
+
+// ── Volume Chart ──
+fetch('/api/chart/volume')
+  .then(r => r.json())
+  .then(d => {
+    Plotly.newPlot('chart-volume', [
+      {
+        type: 'scatter', mode: 'lines', name: 'コール出来高',
+        x: d.dates, y: d.call_volume,
+        line: { color: '#4c9aff', width: 1.5 },
+        hovertemplate: 'コール: %{y:,}<extra></extra>',
+      },
+      {
+        type: 'scatter', mode: 'lines', name: 'プット出来高',
+        x: d.dates, y: d.put_volume,
+        line: { color: '#ff6b6b', width: 1.5 },
+        hovertemplate: 'プット: %{y:,}<extra></extra>',
+      },
+    ], {
+      ...LAYOUT_BASE,
+      yaxis: { ...LAYOUT_BASE.yaxis, title: '枚数', tickformat: ',.0f' },
+    }, CFG);
+
+    Plotly.newPlot('chart-total', [
+      {
+        type: 'scatter', mode: 'lines', name: '総出来高',
+        x: d.dates, y: d.total_volume,
+        line: { color: '#a78bfa', width: 1.5 },
+        fill: 'tozeroy', fillcolor: 'rgba(167,139,250,0.07)',
+        hovertemplate: '総出来高: %{y:,}<extra></extra>',
+      },
+    ], {
+      ...LAYOUT_BASE,
+      legend: { ...LAYOUT_BASE.legend },
+      yaxis: { ...LAYOUT_BASE.yaxis, title: '枚数', tickformat: ',.0f' },
+    }, CFG);
+  });
+
+// ── Ratio Charts ──
+fetch('/api/chart/ratio')
+  .then(r => r.json())
+  .then(d => {
+    Plotly.newPlot('chart-cp-ratio', [
+      {
+        type: 'scatter', mode: 'lines', name: 'コール/プット比率（日次）',
+        x: d.dates, y: d.call_put_ratio,
+        line: { color: '#4c9aff', width: 1 }, opacity: 0.6,
+        hovertemplate: 'C/P: %{y:.3f}<extra></extra>',
+      },
+      {
+        type: 'scatter', mode: 'lines', name: '20日移動平均',
+        x: d.dates, y: d.cp_ma20,
+        line: { color: '#ffd166', width: 2 },
+        hovertemplate: 'MA20: %{y:.3f}<extra></extra>',
+      },
+      {
+        type: 'scatter', mode: 'lines', name: 'ニュートラル (1.0)',
+        x: [d.dates[0], d.dates[d.dates.length - 1]], y: [1.0, 1.0],
+        line: { color: '#888', width: 1, dash: 'dash' },
+        hoverinfo: 'skip',
+      },
+    ], {
+      ...LAYOUT_BASE,
+      yaxis: { ...LAYOUT_BASE.yaxis, title: 'コール/プット比率' },
+    }, CFG);
+
+    Plotly.newPlot('chart-pc-ratio', [
+      {
+        type: 'scatter', mode: 'lines', name: 'プット/コール比率（日次）',
+        x: d.dates, y: d.put_call_ratio,
+        line: { color: '#ff6b6b', width: 1 }, opacity: 0.6,
+        hovertemplate: 'P/C: %{y:.2f}<extra></extra>',
+      },
+      {
+        type: 'scatter', mode: 'lines', name: '20日移動平均',
+        x: d.dates, y: d.pc_ma20,
+        line: { color: '#06d6a0', width: 2 },
+        hovertemplate: 'MA20: %{y:.2f}<extra></extra>',
+      },
+      {
+        type: 'scatter', mode: 'lines', name: 'ニュートラル (1.0)',
+        x: [d.dates[0], d.dates[d.dates.length - 1]], y: [1.0, 1.0],
+        line: { color: '#888', width: 1, dash: 'dash' },
+        hoverinfo: 'skip',
+      },
+    ], {
+      ...LAYOUT_BASE,
+      yaxis: { ...LAYOUT_BASE.yaxis, title: 'プット/コール比率' },
+    }, CFG);
+  });
+
+// ── Stats ──
+function addStatCard(grid, label, value, sub, isDate) {
+  const card = document.createElement('div');
+  card.className = 'stat-card';
+
+  const lbl = document.createElement('div');
+  lbl.className = 'stat-label';
+  lbl.textContent = label;
+
+  const val = document.createElement('div');
+  val.className = 'stat-value' + (isDate ? ' stat-date' : '');
+  val.textContent = value;
+
+  card.appendChild(lbl);
+  card.appendChild(val);
+
+  if (sub) {
+    const s = document.createElement('div');
+    s.className = 'stat-sub';
+    s.textContent = sub;
+    card.appendChild(s);
+  }
+  grid.appendChild(card);
+}
+
+fetch('/api/stats')
+  .then(r => r.json())
+  .then(d => {
+    const fmt = n => Number(n).toLocaleString();
+    const grid = document.getElementById('stats-grid');
+    const items = [
+      ['最新日付', d.latest_date, 'CBOE 最終営業日', true],
+      ['コール出来高（最新）', fmt(d.latest_call), '枚', false],
+      ['プット出来高（最新）', fmt(d.latest_put), '枚', false],
+      ['総出来高（最新）', fmt(d.latest_total), '枚', false],
+      ['C/P 比率（最新）', d.latest_cp_ratio, 'コール÷プット', false],
+      ['P/C 比率（最新）', d.latest_pc_ratio, 'プット÷コール', false],
+      ['C/P 比率（2年平均）', d.avg_cp_ratio, '', false],
+      ['P/C 比率（2年平均）', d.avg_pc_ratio, '', false],
+      ['C/P 比率（最小）', d.min_cp_ratio, '', false],
+      ['C/P 比率（最大）', d.max_cp_ratio, '', false],
+      ['コール平均（2年）', fmt(d.avg_call_volume), '枚/日', false],
+      ['プット平均（2年）', fmt(d.avg_put_volume), '枚/日', false],
+      ['取得日数', d.total_days, '営業日', false],
+    ];
+    items.forEach(([label, value, sub, isDate]) => addStatCard(grid, label, value, sub, isDate));
+  });
+</script>
+</body>
+</html>
